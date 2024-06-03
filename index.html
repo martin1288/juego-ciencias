@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Game</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pixi.js/5.3.10/pixi.min.js"></script>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+    }
+    #gameOverScreen {
+      display: none;
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+    }
+    #scoreBoard {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      color: white;
+      font-size: 20px;
+    }
+    #livesBoard {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      display: flex;
+      gap: 5px;
+    }
+    #livesBoard img {
+      width: 30px;
+      height: 30px;
+    }
+  </style>
+</head>
+<body>
+  <div id="gameOverScreen">
+    <img id="gameOverImage" src="reprobado.jpg" alt="Game Over">
+  </div>
+  <div id="scoreBoard">Score: 0</div>
+  <div id="livesBoard">
+    <img src="vidas.png" alt="Life">
+    <img src="vidas.png" alt="Life">
+    <img src="vidas.png" alt="Life">
+  </div>
+  <script>
+    // Initialize PixiJS
+    const app = new PIXI.Application({
+      width: window.innerWidth,
+      height: window.innerHeight,
+      backgroundColor: 0x87CEEB, // Light blue background to simulate the sky
+    });
+    document.body.appendChild(app.view);
+
+    // Adjust canvas size on window resize
+    window.addEventListener('resize', () => {
+      app.renderer.resize(window.innerWidth, window.innerHeight);
+    });
+
+    // Game variables
+    let score = 0;
+    let lives = 3;
+    let isPaused = false;
+
+    // Create ground
+    const ground = new PIXI.Graphics();
+    ground.beginFill(0x654321); // Brown color
+    ground.drawRect(0, app.screen.height - 50, app.screen.width, 50); // Ground position and size
+    ground.endFill();
+    app.stage.addChild(ground);
+
+    // Create platforms
+    const platforms = [
+      { x: 100, y: app.screen.height - 150, width: 200, height: 20, vx: 1 },
+      { x: 350, y: app.screen.height - 250, width: 150, height: 20, vx: 2 },
+      { x: 600, y: app.screen.height - 350, width: 150, height: 20, vx: -1 },
+      { x: 150, y: app.screen.height - 450, width: 200, height: 20, vx: 1.5 },
+      { x: 400, y: app.screen.height - 550, width: 100, height: 20, vx: -1.5 },
+    ];
+    platforms.forEach(platform => {
+      const platformGraphic = new PIXI.Graphics();
+      platformGraphic.beginFill(0x8B4513); // SaddleBrown color
+      platformGraphic.drawRect(platform.x, platform.y, platform.width, platform.height);
+      platformGraphic.endFill();
+      platform.sprite = platformGraphic;
+      app.stage.addChild(platformGraphic);
+    });
+
+    // Load player image
+    const playerTexture = PIXI.Texture.from('stickman.png');
+    const player = new PIXI.Sprite(playerTexture);
+    player.anchor.set(0.5);
+    player.x = 50;
+    player.y = app.screen.height - 100; // Initial player position
+    player.vx = 0; // Velocity X
+    player.vy = 0; // Velocity Y
+    app.stage.addChild(player);
+
+    // Load obstacle and shield images
+    const obstacleTexture = PIXI.Texture.from('bomba.png');
+    const shieldTexture = PIXI.Texture.from('img.png');
+    const obstacles = [];
+    const shields = [];
+
+    for (let i = 0; i < 3; i++) {
+      const obstacle = new PIXI.Sprite(obstacleTexture);
+      obstacle.anchor.set(0.5);
+      obstacle.x = Math.random() * (app.screen.width - 100) + 50;
+      obstacle.y = -Math.random() * 500;
+      obstacle.speed = Math.random() * 2 + 1;
+      obstacles.push(obstacle);
+      app.stage.addChild(obstacle);
+
+      const shield = new PIXI.Sprite(shieldTexture);
+      shield.anchor.set(0.5);
+      shield.x = Math.random() * (app.screen.width - 100) + 50;
+      shield.y = -Math.random() * 500;
+      shield.speed = Math.random() * 2 + 1;
+      shields.push(shield);
+      app.stage.addChild(shield);
+    }
+
+    // Variables for jumping
+    let isJumping = false;
+    const gravity = 0.5;
+    const jumpPower = -10;
+    let fallHeight = 0;
+
+    // Game over elements
+    const gameOverScreen = document.getElementById('gameOverScreen');
+    const gameOverImage = document.getElementById('gameOverImage');
+
+    // Score and lives elements
+    const scoreBoard = document.getElementById('scoreBoard');
+    const livesBoard = document.getElementById('livesBoard');
+
+    // Function to update lives display
+    function updateLives() {
+      const lifeImages = livesBoard.querySelectorAll('img');
+      lifeImages.forEach((img, index) => {
+        if (index < lives) {
+          img.style.display = 'inline';
+        } else {
+          img.style.display = 'none';
+        }
+      });
+    }
+
+    // Game loop
+    app.ticker.add(() => {
+      if (isPaused) return;
+
+      // Apply gravity
+      player.vy += gravity;
+      player.y += player.vy;
+
+      // Horizontal movement
+      player.x += player.vx;
+
+      // Move platforms
+      platforms.forEach(platform => {
+        platform.x += platform.vx;
+        if (platform.x <= 0 || platform.x + platform.width >= app.screen.width) {
+          platform.vx *= -1;
+        }
+        platform.sprite.x = platform.x;
+      });
+
+      // Check for collision with ground
+      if (player.y > app.screen.height - 100) {
+        if (player.vy > 10) {
+          lives--;
+          updateLives();
+          if (lives <= 0) {
+            gameOverScreen.style.display = 'block';
+            app.ticker.stop();
+          }
+        }
+        player.y = app.screen.height - 100;
+        player.vy = 0;
+        isJumping = false;
+        fallHeight = 0;
+      }
+
+      // Check for collision with platforms
+      platforms.forEach(platform => {
+        if (player.y + player.height / 2 > platform.y &&
+            player.y - player.height / 2 < platform.y + platform.height &&
+            player.x + player.width / 2 > platform.x &&
+            player.x - player.width / 2 < platform.x + platform.width) {
+          if (player.vy > 0) {
+            player.y = platform.y - player.height / 2;
+            player.vy = 0;
+            isJumping = false;
+            fallHeight = 0;
+          }
+        }
+      });
+
+      // Move obstacles
+      obstacles.forEach(obstacle => {
+        obstacle.y += obstacle.speed;
+        if (obstacle.y > app.screen.height) {
+          obstacle.y = -Math.random() * 500;
+          obstacle.x = Math.random() * (app.screen.width - 100) + 50;
+        }
+
+        // Check for collision with player
+        if (
+          player.x < obstacle.x + obstacle.width / 2 &&
+          player.x + player.width / 2 > obstacle.x &&
+          player.y < obstacle.y + obstacle.height / 2 &&
+          player.y + player.height / 2 > obstacle.y
+        ) {
+          lives--;
+          updateLives();
+          if (lives <= 0) {
+            gameOverScreen.style.display = 'block';
+            app.ticker.stop();
+          }
+          obstacle.y = -Math.random() * 500;
+          obstacle.x = Math.random() * (app.screen.width - 100) + 50;
+        }
+      });
+
+      // Move shields
+      shields.forEach(shield => {
+        shield.y += shield.speed;
+        if (shield.y > app.screen.height) {
+          shield.y = -Math.random() * 500;
+          shield.x = Math.random() * (app.screen.width - 100) + 50;
+        }
+
+        // Check for collision with player
+        if (
+          player.x < shield.x + shield.width / 2 &&
+          player.x + player.width / 2 > shield.x &&
+          player.y < shield.y + shield.height / 2 &&
+          player.y + player.height / 2 > shield.y
+        ) {
+          score += 10;
+          scoreBoard.textContent = `Score: ${score}`;
+          shield.y = -Math.random() * 500;
+          shield.x = Math.random() * (app.screen.width - 100) + 50;
+        }
+      });
+    });
+
+    // Handle keyboard input
+    const keys = {};
+    window.addEventListener("keydown", e => {
+      keys[e.key] = true;
+      if (e.key === 'ArrowLeft') player.vx = -5;
+      if (e.key === 'ArrowRight') player.vx = 5;
+      if (e.key === ' ') {
+        if (!isJumping) {
+          player.vy = jumpPower;
+          isJumping = true;
+        }
+      }
+      if (e.key === 'p') {
+        isPaused = !isPaused;
+      }
+    });
+
+    window.addEventListener("keyup", e => {
+      keys[e.key] = false;
+      if (e.key === 'ArrowLeft' && !keys['ArrowRight']) player.vx = 0;
+      if (e.key === 'ArrowRight' && !keys['ArrowLeft']) player.vx = 0;
+    });
+  </script>
+</body>
+</html>
+
